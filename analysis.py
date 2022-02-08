@@ -3,16 +3,19 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import bo
 import plotz
+from sklearn.preprocessing import StandardScaler
+
 
 unique_m = pd.read_csv('unique_m.csv')
 train = pd.read_csv('train.csv')
 Tc = unique_m['critical_temp']
 
+'''
 plotz.plot_element_proportion(unique_m, Tc)
 plotz.hist_critical_temp(train, 'all elements')
 plotz.prob_plot(train, 'norm', 'all elements')
 plotz.prob_plot(train, 'poisson', 'all elements')
-
+'''
 #magg_70 = train.query('critical_temp>70')
 #min_15 = train.query('critical_temp<15')
 
@@ -76,6 +79,9 @@ Tc = Tc.reshape(-1,1)
 y = Tc
 x = train[[i[0] for i in features]]
 
+
+# Features selection - backward stepwise
+'''
 df = bo.backward_stepwise(x, y)
 df_min_RSS = df[df.groupby('numb_features')['RSS'].transform(min) == df['RSS']]
 df_max_R2 = df[df.groupby('numb_features')['R_squared'].transform(max) == df['R_squared']]
@@ -93,11 +99,51 @@ bo.calculate_Cp_AIC_BIC_R2_adj(df_min_RSS, y, 65)
 
 plotz.Plot_Cp_AIC_BIC_R2adj(df_max_R2,'models with R^2 max')
 plotz.Plot_Cp_AIC_BIC_R2adj(df_min_RSS,'models with R^2 max')
-
+'''
 '''
 y = Tcp
 X2 = sm.add_constant(x)
 est = sm.OLS(y, X2)
 est2 = est.fit()
 print(est2.summary())
+'''
+
+# Research of best alpha for lasso regression
+#best_score, best_alpha = bo.alpha_tuning(x,y)
+#print(best_score, best_alpha)
+
+# Lasso regression
+#score_test, score_train, intercetta, coeff = bo.lasso_reg(x, y)
+'''
+print('score test: ', score_test)
+print('score train: ', score_train)
+print('Intercetta: ', intercetta)
+print('Coefficienti: ', coeff)
+print(len(coeff))
+
+feat_name = list(x.columns)
+coeff = list(coeff)
+count = 0
+
+for l, feat in zip(coeff, feat_name):
+    print('NON IF -> coeff:', l)
+    #print('feature name: ', feat)
+    if np.abs(l)<0.1:
+        print('IF -> coeff: ', l) 
+        print('feature name: ', feat)
+        count = count + 1
+print(count)
+'''
+
+#plotz.plot_lasso_alpha(x,y)
+
+
+#PCA
+'''
+num_components = 25
+components, var_ratio, load_matrix = bo.principal_component_analysis(x,num_components)
+plotz.PCA_variance_ratio(var_ratio, num_components)
+print(load_matrix[['PC1', 'PC2']])
+
+print(bo.multi_reg(components,y))
 '''

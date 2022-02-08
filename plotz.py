@@ -54,7 +54,6 @@ def plot_element_proportion(unique_m, Tc):
     fig, ax = plt.subplots()
     ax.scatter(list(range(len(sort_elem))), percentage)
 
-
     for x in coordinates: plt.annotate(x[1], (x[0], x[2]))
     plt.xlabel(' ')
     plt.ylabel('Element proportion')
@@ -71,3 +70,37 @@ def Plot_Cp_AIC_BIC_R2adj(dframe, dframe_name):
         plt.xlabel('Number of predictors')
         plt.title('Subset selection using ' + v + ' from ' + dframe_name)
         plt.show()
+
+# plot the cumulative variance versus number of components
+def PCA_variance_ratio(var_ratio, num_components):
+    cum_var = np.cumsum(var_ratio)
+    plt.bar(range(1,num_components+1), var_ratio, alpha=0.5,
+            align='center', label='individual explained variance')
+    plt.step(range(1,num_components+1), cum_var, where='mid',
+            label='cumulative explained variance')
+    plt.ylabel('Explained variance ratio')
+    plt.xlabel('Principal component index')
+    plt.legend(loc='best')
+    plt.ylabel('Cumulative explained variance')
+    plt.show()
+
+# lasso coefficients as a function of alpha
+from sklearn.linear_model import Lasso
+def plot_lasso_alpha(X_train, y_train):
+    alphas = np.linspace(0.01,500,100)
+    lasso = Lasso(max_iter=1000)
+    
+    coefs = []
+    for a in alphas:
+        lasso.set_params(alpha=a)
+        lasso.fit(X_train, y_train)
+        coefs.append(lasso.coef_)
+    
+    ax = plt.gca()
+    ax.plot(alphas, coefs)
+    ax.set_xscale('log')
+    plt.axis('tight')
+    plt.xlabel('alpha')
+    plt.ylabel('Standardized Coefficients')
+    plt.title('Lasso coefficients as a function of alpha')
+    plt.show()

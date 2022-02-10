@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split, RepeatedKFold, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler, scale
 import scipy.stats as stats
@@ -37,18 +37,22 @@ def multi_reg(x, y):
     intercetta = multi_reg.intercept_
 
     # R^2
-    R_due = multi_reg.score(X_train, y_train)
+    R2_train = multi_reg.score(X_train, y_train)
+    R2_test = multi_reg.score(X_train, y_train)
+
     # Predizione sul test set
     y_pred_train = multi_reg.predict(X_train)
     y_pred_test = multi_reg.predict(X_test)
     # errore quadratico medio
-    mse = mean_squared_error(y_test, y_pred_train)
-    rss = mse * len(y)
+    mse_train = mean_squared_error(y_train, y_pred_train)
+    mse_test = mean_squared_error(y_test, y_pred_test)
+
+    rss = mse_train * len(y)
     # Plot y_test vs y_pred
     #plt.plot(y_test, y_pred, 'bo')
     #plt.show()
-
-    return rss, R_due
+    #return mse_train, R2_train, mse_test, R2_test
+    return rss, R2_train
 
 # Forward stepwise for the models selection (you can use RSS 
 # or R^2 to choose the variable to remove at each iteration,
@@ -91,7 +95,7 @@ def calculate_Cp_AIC_BIC_R2_adj(dframe, y, num_of_features):
     dframe['R_squared_adj'] = 1 - ( (1 - dframe['R_squared'])*(m-1)/(m-dframe['numb_features'] -1))
     #print(df['R_squared_adj'].max())
 
-def alpha_tuning(x,y):
+def alpha_tuning_lasso(x,y):
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -116,12 +120,52 @@ def lasso_reg(x,y, alpha):
     lasso = Lasso(alpha=alpha)
     # Fit
     lasso.fit(X_train, y_train)
+    y_pred_train = lasso.predict(X_train)
+    y_pred_test = lasso.predict(X_test)
     # Create the model score
-    score_test, score_train = lasso.score(X_test, y_test), lasso.score(X_train, y_train)
+    R2_test, R2_train = lasso.score(X_test, y_test), lasso.score(X_train, y_train)
+    mse_train = mean_squared_error(y_train, y_pred_train)
+    mse_test = mean_squared_error(y_test, y_pred_test)
     # Fit results
     intercetta = lasso.intercept_
     coeff = lasso.coef_
-    return score_test, score_train, intercetta, coeff
+    return R2_test, R2_train, mse_test, mse_train
+
+def alpha_tuning_ridge(x,y):
+    # standardizzazione delle feature
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
+    # define model evaluation method
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    # define grid
+    grid = dict()
+    grid['alpha'] = np.arange(0.0001, 100, 10)
+    # define search
+    search = GridSearchCV(Ridge(), grid, scoring='neg_mean_squared_error', cv=cv, n_jobs=-1)
+    # perform the search
+    results = search.fit(x, y)
+    return results.best_params_
+
+def ridge_reg(x,y, alpha):
+    # standardizzazione delle feature
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
+    # Splitting training set and test set 70/30
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.3, train_size=0.7)
+    # Create an instance of Ridge Regression implementation
+    ridge = Ridge(alpha=alpha)
+    # Fit
+    ridge.fit(X_train, y_train)
+    y_pred_train = ridge.predict(X_train)
+    y_pred_test = ridge.predict(X_test)
+    # Create the model score
+    R2_test, R2_train = ridge.score(X_test, y_test), ridge.score(X_train, y_train)
+    mse_train = mean_squared_error(y_train, y_pred_train)
+    mse_test = mean_squared_error(y_test, y_pred_test)
+    # Fit results
+    intercetta = ridge.intercept_
+    coeff = ridge.coef_
+    return R2_test, R2_train, mse_test, mse_train
 
 def num_feat_tuning_pca(x,y):
     # standardizzazione delle feature
@@ -131,7 +175,7 @@ def num_feat_tuning_pca(x,y):
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     # define grid
     grid = dict()
-    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 61, 62, 63, 64]
+    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
     # define search
     search = GridSearchCV(PCA(), grid, cv=cv, n_jobs=-1)
     # perform the search
@@ -159,6 +203,21 @@ def principal_component_analysis(x,num_components):
 
     return x_pca, var_ratio, loading_matrix
 
+def num_feat_tuning_pls(x,y):
+    # standardizzazione delle feature
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
+    # define model evaluation method
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    # define grid
+    grid = dict()
+    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
+    # define search
+    search = GridSearchCV(PLSRegression(), grid, scoring='neg_mean_squared_error', cv=cv, n_jobs=-1)
+    # perform the search
+    results = search.fit(x,y)
+    return results.best_params_
+
 def partial_least_square(x,y,num_components):
     # standardizzazione delle feature
     feat_name = list(x.columns)
@@ -168,11 +227,32 @@ def partial_least_square(x,y,num_components):
     pls = PLSRegression(n_components=num_components)
     x_score, y_score = pls.fit_transform(x,y)
     x_load = pls.x_loadings_
+
+    # Splitting training set and test set 70/30
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.3, train_size=0.7)
+    pls.fit(X_train, y_train)
+    y_pred = pls.predict(X_test)
+
     PC_list = []
     for i in range(1,num_components+1):
         PC_list.append('PLS' + str(i))
     loading_matrix = pd.DataFrame(x_load, columns=PC_list, index=feat_name)
-    return x_score, y_score, loading_matrix
+
+    # Variance explained by each component 
+    r2_sum = 0
+    r2_list = []
+    for i in range(0,num_components):
+        Y_pred=np.dot(pls.x_scores_[:,i].reshape(-1,1),pls.y_loadings_[:,i].reshape(-1,1).T)*y_train.std(axis=0, ddof=1)+y_train.mean(axis=0)
+        r2_sum += round(r2_score(y_train,Y_pred),5) 
+        r2_for_comp = round(r2_score(y_train,Y_pred),5) 
+        r2_list.append(r2_for_comp)
+    # Variance ratio
+    var_ratio = []
+    for i in r2_list:
+        var_ratio.append(i/r2_sum)
+    # Cumulative Variance explains
+    pls_var_rate=np.cumsum(np.round(var_ratio, decimals=4)*100)
+    return pls_var_rate, loading_matrix
 
 def PCR_mse_for_nc(x,y):
     #scale predictor variables
@@ -196,7 +276,6 @@ def PCR_mse_for_nc(x,y):
         mse.append(score)
     
     return mse
-
 
 def PLS_mse_for_nc(x,y):
     #define cross-validation method

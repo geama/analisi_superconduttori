@@ -75,6 +75,9 @@ Tc = Tc.reshape(-1,1)
 y = Tc
 x = train[[i[0] for i in features]]
 
+# benchmark: step zero consists the linear regression
+#rss, r2_train = bo.multi_reg(x,y)
+
 # Features selection - backward stepwise
 '''
 df = bo.backward_stepwise(x, y)
@@ -96,60 +99,61 @@ plotz.Plot_Cp_AIC_BIC_R2adj(df_max_R2,'models with R^2 max')
 plotz.Plot_Cp_AIC_BIC_R2adj(df_min_RSS,'models with RSS min')
 '''
 '''
+# R summery of reg lin
 y = Tcp
 X2 = sm.add_constant(x)
 est = sm.OLS(y, X2)
 est2 = est.fit()
 print(est2.summary())
 '''
+# ----------- RIDGE REGRESSION -----------
+# Research of best alpha for rigde regression using cross validation
+#ridge_alpha = bo.alpha_tuning_ridge(x,y)
 
-# Research of best alpha for lasso regression
-#best_alpha = bo.alpha_tuning(x,y)
-#print(best_alpha)
-
-# Lasso regression
-#alpha = 0.1
-#score_test, score_train, intercetta, coeff = bo.lasso_reg(x, y, alpha)
-'''
-print('score test: ', score_test)
-print('score train: ', score_train)
-print('Intercetta: ', intercetta)
-print('Coefficienti: ', coeff)
-print(len(coeff))
-
-feat_name = list(x.columns)
-coeff = list(coeff)
-count = 0
-
-for l, feat in zip(coeff, feat_name):
-    print('NON IF -> coeff:', l)
-    #print('feature name: ', feat)
-    if np.abs(l)<0.1:
-        print('IF -> coeff: ', l) 
-        print('feature name: ', feat)
-        count = count + 1
-print(count)
-'''
-
-#plotz.plot_lasso_alpha(x,y)
+# plot ridge weight of features versus different alpha values
 #plotz.plot_ridge_alpha(x,y)
 
-# Research of best number of features for PCA
-#print(bo.num_feat_tuning(x,y))
+# with the best alpha, we perform ridge regression
+#print(bo.ridge_reg(x,y,ridge_alpha['alpha']))
 
-#PCA
+# ----------- LASSO REGRESSION -----------
+# Research of best alpha for lasso regression using cross validation
+#lasso_alpha = bo.alpha_tuning_lasso(x,y)
+
+# plot lasso weight of features versus different alpha values
+#plotz.plot_lasso_alpha(x,y)
+
+# with the best alpha, we perform lasso regression
+#print(bo.lasso_reg(x,y,lasso_alpha['alpha']))
+
+# ----------- PRINCIPAL COMPONENT REGRESSION -----------
+# Research of best number of features for PCR using cross validation
+#n_features_pca = bo.num_feat_tuning_pca(x,y)
+#n_features_pca['n_components']
+
+#x_pca, var_ratio, loading_matrix = bo.principal_component_analysis(x,n_features_pca['n_components'])
+# Plot the cumulative variance versus number of components
+#plotz.PCA_variance_ratio(var_ratio, n_features_pca['n_components'])
+
+#Cumulative Variance explains for PCA
+#pcr_var_rate=np.cumsum(np.round(var_ratio, decimals=4)*100)
+#print(pcr_var_rate)
+
+# ----------- PARTIAL LEAST SQUARE REGRESSION -----------
+# Research of best number of features for PLS using cross validation
+#n_features_pls = bo.num_feat_tuning_pca(x,y) 
+
+#pls_var_rate, loading_matrix = bo.partial_least_square(x, y, n_features_pls['n_components'])
+
+# Plot MSE of PLS and PCR versus number of components
 '''
-num_components = 25
-components, var_ratio, load_matrix = bo.principal_component_analysis(x,num_components)
-plotz.PCA_variance_ratio(var_ratio, num_components)
-print(load_matrix[['PC1', 'PC2']])
-
-print(bo.multi_reg(components,y))
+mse_PLS = bo.PLS_mse_for_nc(x,y)
+mse_PCR = bo.PCR_mse_for_nc(x, y)
+plotz.plot_mse_vs_ncomp(mse_PCR, mse_PLS)
 '''
 
-#mse_PLS = bo.PLS_mse_for_nc(x,y)
-#mse_PCR = bo.PCR_mse_for_nc(x, y)
-#plotz.plot_mse_vs_ncomp(mse_PCR, mse_PLS)
+# compute of loadings (the coefficients of the linear combination of the original variables 
+# from which the principal components are constructed.) of PCA and PLS and create a csv file.
 '''
 loading_matrixPCA = pd.DataFrame()
 loading_matrixPLS = pd.DataFrame()
@@ -158,12 +162,6 @@ for p in list(range(5,66,5)):
     PCA_load = pd.concat([loading_matrixPCA, loading_matrixPCA_for_p], axis=0, ignore_index=False)
     x_score, y_score, loading_matrixPLS_for_p = bo.partial_least_square(x,y,p)
     PLS_load = pd.concat([loading_matrixPLS, loading_matrixPLS_for_p], axis=0, ignore_index=False)
-    print('num of features: ', p)
-    print('---------- PCA ----------')
-    print(x_pca)
-    print(var_ratio)
-    print('---------- PLS ----------')
-    print(x_score, y_score)
 PCA_load.to_csv('PCA_load.csv', index=False)
 PLS_load.to_csv('PLS_load.csv', index=False)
 '''

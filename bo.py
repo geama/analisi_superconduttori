@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression, Lasso, LassoCV
+from sklearn.linear_model import LinearRegression, Lasso
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
-from sklearn.metrics import confusion_matrix, mean_squared_error, accuracy_score
-from sklearn.model_selection import train_test_split, RepeatedKFold, GridSearchCV
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split, RepeatedKFold, GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler, scale
 import scipy.stats as stats
 import pylab
 import statsmodels.api as sm
@@ -92,27 +93,27 @@ def calculate_Cp_AIC_BIC_R2_adj(dframe, y, num_of_features):
 
 def alpha_tuning(x,y):
     # standardizzazione delle feature
-    #scalar = StandardScaler()
-    #x = scalar.fit_transform(x)
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
     # define model evaluation method
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     # define grid
     grid = dict()
     grid['alpha'] = np.arange(0, 1, 0.01)
     # define search
-    search = GridSearchCV(Lasso(), grid, scoring='neg_mean_absolute_error', cv=cv, n_jobs=-1)
+    search = GridSearchCV(Lasso(), grid, scoring='neg_mean_squared_error', cv=cv, n_jobs=-1)
     # perform the search
     results = search.fit(x, y)
-    return results.best_score_, results.best_params_
+    return results.best_params_
 
-def lasso_reg(x,y):
+def lasso_reg(x,y, alpha):
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
     # Splitting training set and test set 70/30
     X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.3, train_size=0.7)
     # Create an instance of Lasso Regression implementation
-    lasso = Lasso(alpha=0.01)
+    lasso = Lasso(alpha=alpha)
     # Fit
     lasso.fit(X_train, y_train)
     # Create the model score
@@ -121,17 +122,31 @@ def lasso_reg(x,y):
     intercetta = lasso.intercept_
     coeff = lasso.coef_
     return score_test, score_train, intercetta, coeff
-    
+
+def num_feat_tuning_pca(x,y):
+    # standardizzazione delle feature
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
+    # define model evaluation method
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    # define grid
+    grid = dict()
+    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 61, 62, 63, 64]
+    # define search
+    search = GridSearchCV(PCA(), grid, cv=cv, n_jobs=-1)
+    # perform the search
+    results = search.fit(x,y)
+    return results.best_params_
+
 # principal component analysis (PCA) for feature extraction
 def principal_component_analysis(x,num_components):
     feat_name = list(x.columns)
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
-    # PCA
+    # PCA*
     pca = PCA(n_components=num_components)
     x_pca = pca.fit_transform(x)
-    x_pca = pca.transform(x)
     #components = pca.components_
     # ex_var_ratio is a vector of the variance explained by each dimension
     var_ratio = pca.explained_variance_ratio_
@@ -142,13 +157,63 @@ def principal_component_analysis(x,num_components):
         PC_list.append('PC' + str(i))
     loading_matrix = pd.DataFrame(loadings, columns=PC_list, index=feat_name)
 
-    # calculate covariance matrix
-    #cov_mat = np.cov(x)
-    # eigenvectors and eigenvalues of covariance matrix of features
-    #eigen_vals, eigen_vecs = np.linalg.eig(cov_mat)
-
-    #tot = sum(eigen_vals)
-    #var_exp = [(i / tot) for i in sorted(eigen_vals, reverse=True)]
-    #cum_var_exp = np.cumsum(var_exp)
-    
     return x_pca, var_ratio, loading_matrix
+
+def partial_least_square(x,y,num_components):
+    # standardizzazione delle feature
+    feat_name = list(x.columns)
+    scalar = StandardScaler()
+    x = scalar.fit_transform(x)
+    # PLS
+    pls = PLSRegression(n_components=num_components)
+    x_score, y_score = pls.fit_transform(x,y)
+    x_load = pls.x_loadings_
+    PC_list = []
+    for i in range(1,num_components+1):
+        PC_list.append('PLS' + str(i))
+    loading_matrix = pd.DataFrame(x_load, columns=PC_list, index=feat_name)
+    return x_score, y_score, loading_matrix
+
+def PCR_mse_for_nc(x,y):
+    #scale predictor variables
+    pca = PCA()
+    regr = LinearRegression()
+    X_reduced = pca.fit_transform(scale(x))
+    #define cross validation method
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    
+    mse = []
+    # Calculate MSE with only the intercept
+    score = -1*cross_val_score(regr,
+            np.ones((len(X_reduced),1)), y, cv=cv,
+            scoring='neg_mean_squared_error').mean()    
+    mse.append(score)
+
+    # Calculate MSE using cross-validation, adding one component at a time
+    for i in np.arange(1, 65):
+        score = -1*cross_val_score(regr,
+                X_reduced[:,:i], y, cv=cv, scoring='neg_mean_squared_error').mean()
+        mse.append(score)
+    
+    return mse
+
+
+def PLS_mse_for_nc(x,y):
+    #define cross-validation method
+    cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
+    mse = []
+    n = len(x)
+
+    # Calculate MSE with only the intercept
+    score = -1*cross_val_score(PLSRegression(n_components=1),
+            np.ones((n,1)), y, cv=cv, scoring='neg_mean_squared_error').mean()    
+    mse.append(score)
+
+    # Calculate MSE using cross-validation, adding one component at a time
+    for i in np.arange(1, 65):
+        pls = PLSRegression(n_components=i)
+        score = -1*cross_val_score(pls, scale(x), y, cv=cv,
+                scoring='neg_mean_squared_error').mean()
+        mse.append(score)
+
+    return mse

@@ -87,7 +87,7 @@ def PCA_variance_ratio(var_ratio, num_components):
 # lasso coefficients as a function of alpha
 from sklearn.linear_model import Lasso
 def plot_lasso_alpha(X_train, y_train):
-    alphas = np.linspace(0.01,500,100)
+    alphas = np.linspace(0.01,100,100)
     lasso = Lasso(max_iter=1000)
     
     coefs = []
@@ -103,4 +103,33 @@ def plot_lasso_alpha(X_train, y_train):
     plt.xlabel('alpha')
     plt.ylabel('Standardized Coefficients')
     plt.title('Lasso coefficients as a function of alpha')
+    plt.show()
+
+from sklearn.linear_model import Ridge
+def plot_ridge_alpha(x, y):
+    n_alphas = 200
+    alphas = np.logspace(-6, 6, n_alphas)
+
+    coefs = []
+    for a in alphas:
+        ridge = Ridge(alpha=a, fit_intercept=False)
+        ridge.fit(x, y)
+        coefs.append(ridge.coef_[0])
+    ax = plt.gca()
+    ax.plot(alphas, coefs)
+    ax.set_xscale("log")
+    ax.set_xlim(ax.get_xlim()[::-1])  # reverse axis
+    plt.xlabel("alpha")
+    plt.ylabel("weights")
+    plt.title("Ridge coefficients as a function of the regularization")
+    plt.axis("tight")
+    plt.show()
+
+# plot test MSE vs num of components PLS
+def plot_mse_vs_ncomp(mse_PCA, mse_PLS):
+    plt.plot(list(range(0,65)), mse_PCA, label='PC Regression')
+    plt.plot(list(range(0,65)), mse_PLS, label='PLS Regression')
+    plt.xlabel('Number of components')
+    plt.ylabel('MSE')
+    plt.legend(loc='best')
     plt.show()

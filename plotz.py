@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pylab
+import seaborn as sns
 
 def hist_critical_temp(dframe, title):
     dframe['critical_temp'].plot(kind='hist', color = 'teal', bins = 10, alpha = 0.6)
@@ -30,7 +31,9 @@ def prob_plot(dframe, dist, name):
 
 # plot of element proportion into the dataset
 def plot_element_proportion(unique_m, Tc):
-    elements = ['H','He','Li','Be','B','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca','Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn','Ga','Ge','As','Se','Br','Kr','Rb','Sr','Y','Zr','Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd','In','Sn',	'Sb','Te','I','Xe','Cs','Ba','La','Ce','Pr','Nd','Pm','Sm','Eu','Gd','Tb','Dy','Ho','Er','Tm','Yb','Lu','Hf','Ta','W','Re','Os','Ir','Pt','Au','Hg','Tl','Pb','Bi','Po','At','Rn']
+    elements = list(unique_m.columns)
+    elements.remove('critical_temp')
+    elements.remove('material')
     total_n = len(Tc)
     perc_elements = []
     for element in elements:
@@ -58,6 +61,15 @@ def plot_element_proportion(unique_m, Tc):
     plt.xlabel(' ')
     plt.ylabel('Element proportion')
     plt.title('Proportions of the superconductors that had each element')
+    plt.show()
+
+#plot correlation matrix
+def corr_matrix(dframe):
+    corr = dframe.corr()
+    matrix = sns.heatmap(corr, 
+            xticklabels=corr.columns.values,
+            yticklabels=corr.columns.values)
+    fig = matrix.get_figure()
     plt.show()
 
 # plot C_p, AIC, BIC and R_2_adj versus the number of features
@@ -118,18 +130,29 @@ def plot_ridge_alpha(x, y):
     ax = plt.gca()
     ax.plot(alphas, coefs)
     ax.set_xscale("log")
-    ax.set_xlim(ax.get_xlim()[::-1])  # reverse axis
     plt.xlabel("alpha")
     plt.ylabel("weights")
     plt.title("Ridge coefficients as a function of the regularization")
     plt.axis("tight")
     plt.show()
 
-# plot test MSE vs num of components PLS
+# plot test MSE vs num of components 
 def plot_mse_vs_ncomp(mse_PCA, mse_PLS):
     plt.plot(list(range(0,65)), mse_PCA, label='PC Regression')
     plt.plot(list(range(0,65)), mse_PLS, label='PLS Regression')
     plt.xlabel('Number of components')
     plt.ylabel('MSE')
     plt.legend(loc='best')
+    plt.show()
+
+# plot the chart of MSE versus number of estimators
+def plt_mse_vs_nestim_tree(estimators, bagging_mse, rf_mse, boosting_mse):
+    plt.figure(figsize=(8, 8))
+    plt.title('Bagging, Random Forest and Boosting comparison')
+    plt.plot(estimators, bagging_mse, 'b-', color="black", label='Bagging')
+    plt.plot(estimators, rf_mse, 'b-', color="blue", label='Random Forest')
+    plt.plot(estimators, boosting_mse, 'b-', color="red", label='Boosting')
+    plt.legend(loc='upper right')
+    plt.xlabel('Estimators')
+    plt.ylabel('Mean Squared Error')
     plt.show()

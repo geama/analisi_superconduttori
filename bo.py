@@ -19,11 +19,14 @@ def stat_parameters(dframe, feature):
     quartile_25 = np.quantile(dframe[feature], 0.25)
     median = np.quantile(dframe[feature], 0.50)
     quartile_75 = np.quantile(dframe[feature], 0.75)
-    stats.kurtosis(dframe[feature])
+    kurtosis = stats.kurtosis(dframe[feature], fisher=True)
+    test_k = stats.kurtosistest(dframe[feature])
     # Fisher-Pearson coefficient of skewness
-    stats.skew(dframe[feature])
-    return (size, min, quartile_25, median, quartile_75, max, media, std)
+    skewness = stats.skew(dframe[feature])
+    return skewness, kurtosis, test_k
 
+# Performs multilinear regression and returns RSS and R2_train
+# it is possible add to add in return also MSE_test, MSE_train, R2_test, intercept and coefficients 
 def multi_reg(x, y):
     # Splitto training set e test set 70/30
     X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.3, train_size=0.7)
@@ -51,13 +54,12 @@ def multi_reg(x, y):
     # Plot y_test vs y_pred
     #plt.plot(y_test, y_pred, 'bo')
     #plt.show()
-    #return mse_train, R2_train, mse_test, R2_test
-    return rss, R2_train
+    return R2_test, R2_train, mse_test, mse_train
+    #return rss, R2_train
 
 # Forward stepwise for the models selection (you can use RSS 
 # or R^2 to choose the variable to remove at each iteration,
 # this function use min RSS.
-
 def backward_stepwise(x, y):
     result_df = pd.DataFrame()
     for i in range(len(x.columns)-1):
@@ -95,6 +97,7 @@ def calculate_Cp_AIC_BIC_R2_adj(dframe, y, num_of_features):
     dframe['R_squared_adj'] = 1 - ( (1 - dframe['R_squared'])*(m-1)/(m-dframe['numb_features'] -1))
     #print(df['R_squared_adj'].max())
 
+# Implement cross validation for tuning of alpha parameter for lasso regression
 def alpha_tuning_lasso(x,y):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -110,6 +113,8 @@ def alpha_tuning_lasso(x,y):
     results = search.fit(x, y)
     return results.best_params_
 
+# Perform lasso regression and returns R2_test, R2_train, mse_test, mse_train
+# it is possible add in return also the intercept and the coefficients 
 def lasso_reg(x,y, alpha):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -131,6 +136,7 @@ def lasso_reg(x,y, alpha):
     coeff = lasso.coef_
     return R2_test, R2_train, mse_test, mse_train
 
+# Implement cross validation for tuning of alpha parameter for ridge regression
 def alpha_tuning_ridge(x,y):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -139,13 +145,15 @@ def alpha_tuning_ridge(x,y):
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     # define grid
     grid = dict()
-    grid['alpha'] = np.arange(0.0001, 100, 10)
+    grid['alpha'] = np.arange(0.01, 100, 10)
     # define search
     search = GridSearchCV(Ridge(), grid, scoring='neg_mean_squared_error', cv=cv, n_jobs=-1)
     # perform the search
     results = search.fit(x, y)
     return results.best_params_
 
+# Perform ridge regression and returns R2_test, R2_train, mse_test, mse_train
+# it is possible add in return also the intercept and the coefficients 
 def ridge_reg(x,y, alpha):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -167,6 +175,7 @@ def ridge_reg(x,y, alpha):
     coeff = ridge.coef_
     return R2_test, R2_train, mse_test, mse_train
 
+# Implement cross validation for tuning of the number of components for PCA
 def num_feat_tuning_pca(x,y):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -175,7 +184,7 @@ def num_feat_tuning_pca(x,y):
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     # define grid
     grid = dict()
-    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
+    grid['n_components'] = list(range(5,66,5))
     # define search
     search = GridSearchCV(PCA(), grid, cv=cv, n_jobs=-1)
     # perform the search
@@ -192,7 +201,7 @@ def principal_component_analysis(x,num_components):
     pca = PCA(n_components=num_components)
     x_pca = pca.fit_transform(x)
     #components = pca.components_
-    # ex_var_ratio is a vector of the variance explained by each dimension
+    # var_ratio is a vector of the variance explained by each dimension
     var_ratio = pca.explained_variance_ratio_
 
     loadings = pca.components_.T * np.sqrt(var_ratio)
@@ -203,6 +212,7 @@ def principal_component_analysis(x,num_components):
 
     return x_pca, var_ratio, loading_matrix
 
+# Implement cross validation for tuning of the number of components for PLS
 def num_feat_tuning_pls(x,y):
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -211,7 +221,7 @@ def num_feat_tuning_pls(x,y):
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     # define grid
     grid = dict()
-    grid['n_components'] = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
+    grid['n_components'] = list(range(5,66,5))
     # define search
     search = GridSearchCV(PLSRegression(), grid, scoring='neg_mean_squared_error', cv=cv, n_jobs=-1)
     # perform the search
@@ -254,6 +264,7 @@ def partial_least_square(x,y,num_components):
     pls_var_rate=np.cumsum(np.round(var_ratio, decimals=4)*100)
     return pls_var_rate, loading_matrix
 
+# Calculate MSE using cross-validation for [0,65] principal components
 def PCR_mse_for_nc(x,y):
     #scale predictor variables
     pca = PCA()
@@ -277,6 +288,8 @@ def PCR_mse_for_nc(x,y):
     
     return mse
 
+
+# Calculate MSE using cross-validation for [0,65] components of PLS
 def PLS_mse_for_nc(x,y):
     #define cross-validation method
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)

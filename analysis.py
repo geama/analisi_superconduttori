@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd 
 import matplotlib.pyplot as plt
 import bo
+import tree_bo
 import plotz
 
 
@@ -9,30 +10,52 @@ unique_m = pd.read_csv('unique_m.csv')
 train = pd.read_csv('train.csv')
 Tc = unique_m['critical_temp']
 
-'''
-plotz.plot_element_proportion(unique_m, Tc)
-plotz.hist_critical_temp(train, 'all elements')
-plotz.prob_plot(train, 'norm', 'all elements')
-plotz.prob_plot(train, 'poisson', 'all elements')
-'''
-#magg_70 = train.query('critical_temp>70')
-#min_15 = train.query('critical_temp<15')
 
-corr_list = []
-for column in train:
-    corr = np.corrcoef(train[column], train['critical_temp'])
-    corr_list.append([column, corr[0][1]])
-print(len(corr_list))
+# Descriptive analysis
 
+# summary stats
+#print(bo.stat_parameters(train, 'critical_temp'))
+
+# Crea un dataframe con colonne: elemento predominante, numero di composti, Tc media
+'''
+elements = list(unique_m.columns)
+elements.remove('critical_temp')
+elements.remove('material')
+matrix = list(unique_m[elements].max(axis=1))
+elem = list(unique_m[elements].idxmax(axis=1))
+max_elem_df = pd.DataFrame({'Elemento': elem, 'Concentrazione': matrix})
+max_elem_df = pd.concat([max_elem_df, unique_m['critical_temp']], axis=1)
+#max_elem_df.to_csv('max_elem_df.csv', index=False)
+mean_temp = max_elem_df.groupby('Elemento')['critical_temp'].mean()
+print(mean_temp)
+
+len_comp = []
+mean_Tc = []
+for elem in elements:
+    mdf = max_elem_df[max_elem_df['Elemento']==elem]
+    len_mdf = int(len(mdf))
+    mean_tc = mdf['critical_temp'].mean()
+    len_comp.append(len_mdf)
+    mean_Tc.append(mean_tc)
+mean_tc_for_elem = pd.DataFrame({'Elemento predom': elements, 'Quanti composti': len_comp, 'Tc media': mean_Tc})
+mean_tc_for_elem = mean_tc_for_elem.sort_values(by=['Quanti composti'])
+mean_tc_for_elem.to_csv('mean_tc_for_elem.csv', index='False')
+'''
+# plotz.plot_element_proportion(unique_m, Tc)
+# plotz.hist_critical_temp(train, 'all materials')
+# plotz.prob_plot(train, 'norm', 'all materials')
+# plotz.prob_plot(train, 'poisson', 'all materials')
+
+magg_77 = train.query('critical_temp>77') #maggiore della temp critica dell'azoto liquido
+min_77 = train.query('critical_temp<77') #minore della temp critica dell'azoto liquido
+print(len(magg_77), len(min_77))
+
+col = list(train.columns)
 features = []
-for i in corr_list:
-    #if ((i[1]>0.4) or (i[1]<-0.4)) and 'std' not in i[0] and i[0]!='critical_temp':
-    if i[0]!='critical_temp' and 'std' not in i[0]:
+for i in col:
+    if i!='critical_temp' and 'std' not in i:
         features.append(i)
 print(len(features))
-
-#thermal_cond = plt.plot(train['critical_temp'], train['range_ThermalConductivity'], 'bo')
-#plt.show()
 
 # Dataframe for elements with Fe
 iron = unique_m[unique_m['Fe']!=0]
@@ -43,42 +66,44 @@ cuprate = unique_m[unique_m['Cu']!=0]
 # Dataframe for elements without Cu
 non_cuprate = unique_m[unique_m['Cu']==0]
 
+# summary stats
+#print(bo.stat_parameters(non_cuprate, 'critical_temp'))
+
 # Are the distributions normal?
-'''
-plotz.prob_plot(iron, 'norm', 'iron')
-plotz.prob_plot(non_iron, 'norm', 'non iron')
-plotz.prob_plot(cuprate, 'norm', 'cuprate')
-plotz.prob_plot(non_cuprate, 'norm', 'non cuprate')
-'''
+
+# plotz.prob_plot(cuprate, 'norm', 'cuprate')
+# plotz.prob_plot(non_cuprate, 'norm', 'non cuprate')
+
 # Are the distribitions like Poisson distribution?
-'''
-plotz.prob_plot(iron, 'poisson', 'iron')
-plotz.prob_plot(non_iron, 'poisson', 'non iron')
-plotz.prob_plot(cuprate, 'poisson', 'cuprate')
-plotz.prob_plot(non_cuprate, 'poisson', 'non cuprate')
-'''
+
+# plotz.prob_plot(cuprate, 'poisson', 'cuprate')
+# plotz.prob_plot(non_cuprate, 'poisson', 'non cuprate')
+
 # Draw histograms
-'''
-plotz.hist_critical_temp(iron, 'elements with Fe')
-plotz.hist_critical_temp(non_iron, 'elements without Fe')
-plotz.hist_critical_temp(cuprate, 'elements with Cu')
-plotz.hist_critical_temp(non_cuprate, 'elements without Cu')
-'''
+
+# plotz.hist_critical_temp(cuprate, 'materials with Cu')
+# plotz.hist_critical_temp(non_cuprate, 'materials without Cu')
 
 # Draw boxplots
-#Tc_class_elements = [iron['critical_temp'], non_iron['critical_temp'], cuprate['critical_temp'], non_cuprate['critical_temp']]
-#plotz.draw_boxplot(Tc_class_elements, 'Elements with Iron (1), Non Iron (2), Cuprate (3), Non Cuprate (4)', 'Critical temp (K)')
+# Tc_class_elements = [cuprate['critical_temp'], non_cuprate['critical_temp']]
+# plotz.draw_boxplot(Tc_class_elements, 'Materials with Cuprate (1) and without Cuprate (2)', 'Critical temp (K)')
 
 Tc = np.array(Tc)
 Tcp = Tc
 Tc = Tc.reshape(-1,1)
 y = Tc
-x = train[[i[0] for i in features]]
+x = train[[i for i in features]]
 
+# correlation matrix
+#plotz.corr_matrix(x)
+
+# Predictive analysis
 # benchmark: step zero consists the linear regression
 #rss, r2_train = bo.multi_reg(x,y)
+#R2_test, R2_train, mse_test, mse_train = bo.multi_reg(x,y)
 
 # Features selection - backward stepwise
+
 '''
 df = bo.backward_stepwise(x, y)
 df_min_RSS = df[df.groupby('numb_features')['RSS'].transform(min) == df['RSS']]
@@ -165,3 +190,12 @@ for p in list(range(5,66,5)):
 PCA_load.to_csv('PCA_load.csv', index=False)
 PLS_load.to_csv('PLS_load.csv', index=False)
 '''
+
+#print(tree_bo.decision_tree(x,y,8))
+#print(tree_bo.bagging_tree(x,y))
+#print(tree_bo.random_forest(x,y))
+#print(tree_bo.XGB(x,y))
+
+# confronto tra i tre modelli di tree
+#estimators, bagging_mse, rf_mse, boosting_mse = tree_bo.bagforestboost(x,y)
+#plotz.plt_mse_vs_nestim_tree(estimators, bagging_mse, rf_mse, boosting_mse)

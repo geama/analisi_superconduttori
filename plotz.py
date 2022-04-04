@@ -1,8 +1,13 @@
+from operator import index
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas
 import scipy.stats as stats
 import pylab
 import seaborn as sns
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import Lasso, Ridge
 
 def hist_critical_temp(dframe, title):
     dframe['critical_temp'].plot(kind='hist', color = 'teal', bins = 10, alpha = 0.6)
@@ -14,10 +19,11 @@ def hist_critical_temp(dframe, title):
     plt.xlabel('Critical temperature (K)')
     plt.show()
 
-def draw_boxplot(list, title, x_label):
-    plt.boxplot(list, vert=False, showmeans=True)
+def draw_boxplot(lista, title, y_label):
+    lista.boxplot()
+    # plt.boxplot(list, vert=False, showmeans=True)
     plt.title(title)
-    plt.xlabel(x_label)
+    plt.ylabel(y_label)
     plt.show()
 
 def prob_plot(dframe, dist, name):
@@ -63,13 +69,19 @@ def plot_element_proportion(unique_m, Tc):
     plt.title('Proportions of the superconductors that had each element')
     plt.show()
 
+    coord = pandas.DataFrame({'elem_prop': percentage, 'elem': sort_elem})
+    coord.to_csv('elem_proportion.csv')
+
+
 #plot correlation matrix
-def corr_matrix(dframe):
+def corr_coeff(dframe):
     corr = dframe.corr()
-    matrix = sns.heatmap(corr, 
-            xticklabels=corr.columns.values,
-            yticklabels=corr.columns.values)
-    fig = matrix.get_figure()
+    heatmap = sns.heatmap(dframe.corr()[['critical_temp']].sort_values(by='critical_temp', ascending=False),
+            yticklabels=corr.columns.values,   
+            vmin=-1, vmax=1, annot=True, cmap='BrBG')
+    heatmap.set_title('Features Correlating with Critical Temperature')
+    # matrix = sns.heatmap(corr, xticklabels=False, yticklabels=False, cmap='BrBG')
+    fig = heatmap.get_figure()
     plt.show()
 
 # plot C_p, AIC, BIC and R_2_adj versus the number of features
@@ -84,7 +96,7 @@ def Plot_Cp_AIC_BIC_R2adj(dframe, dframe_name):
         plt.show()
 
 # plot the cumulative variance versus number of components
-def PCA_variance_ratio(var_ratio, num_components):
+def cumulative_variance_ratio(var_ratio, num_components):
     cum_var = np.cumsum(var_ratio)
     plt.bar(range(1,num_components+1), var_ratio, alpha=0.5,
             align='center', label='individual explained variance')
@@ -97,7 +109,6 @@ def PCA_variance_ratio(var_ratio, num_components):
     plt.show()
 
 # lasso coefficients as a function of alpha
-from sklearn.linear_model import Lasso
 def plot_lasso_alpha(X_train, y_train):
     alphas = np.linspace(0.01,100,100)
     lasso = Lasso(max_iter=1000)
@@ -117,7 +128,7 @@ def plot_lasso_alpha(X_train, y_train):
     plt.title('Lasso coefficients as a function of alpha')
     plt.show()
 
-from sklearn.linear_model import Ridge
+# alpha parameters plot for ridge regression in semilog scale
 def plot_ridge_alpha(x, y):
     n_alphas = 200
     alphas = np.logspace(-6, 6, n_alphas)
@@ -145,14 +156,90 @@ def plot_mse_vs_ncomp(mse_PCA, mse_PLS):
     plt.legend(loc='best')
     plt.show()
 
+
+# Three plots: 
+# - Total Impurity vs effective alpha for training set; 
+# - Number of nodes vs alpha;
+# - Depth of tree vs alpha.
+def alphas_path(x,y):
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, train_size=0.8)
+    # Create Decision Tree Regressor object
+    tree_reg = DecisionTreeRegressor(min_impurity_decrease=0.001)  #, ccp_alpha=0.618) 
+    # Fit
+    tree_reg.fit(X_train, y_train)
+    path = tree_reg.cost_complexity_pruning_path(X_train, y_train)
+    ccp_alphas, impurities = path.ccp_alphas, path.impurities
+    plt.plot(ccp_alphas[:-2], impurities[:-2], marker="o", drawstyle="steps-post")
+    # df = pd.DataFrame({'alpha': ccp_alphas[:-2], 'impurities': impurities[:-2]})
+    # df.to_csv('alpha_vs_imp_noCu.csv')
+    plt.xlabel("effective alpha")
+    plt.ylabel("total impurity of leaves")
+    plt.title("Total Impurity vs effective alpha for training set")
+    plt.xscale('log')
+    plt.show()
+    ccp_alphas = np.abs(ccp_alphas)
+    print(len(ccp_alphas))      
+    
+    clfs = []
+    for ccp_alpha in ccp_alphas:
+        tree_reg = DecisionTreeRegressor(ccp_alpha=ccp_alpha)
+        tree_reg.fit(X_train, y_train)
+        clfs.append(tree_reg)
+        print(ccp_alpha)
+
+    clfs = clfs[:-2]
+    ccp_alphas = ccp_alphas[:-2]
+
+    node_counts = [tree_reg.tree_.node_count for tree_reg in clfs]
+    print(node_counts)
+    depth = [tree_reg.tree_.max_depth for tree_reg in clfs]
+    fig, ax = plt.subplots(2, 1)
+    ax[0].plot(ccp_alphas, node_counts, marker="o", drawstyle="steps-post")
+    # df2 = pd.DataFrame({'alpha': ccp_alphas, 'node': node_counts})
+    # df2.to_csv('alpha_vs_node_noCu.csv')
+    ax[0].set_xlabel("alpha")
+    ax[0].set_xscale('log')
+    ax[0].set_ylabel("number of nodes")
+    ax[0].set_title("Number of nodes vs alpha")
+    ax[1].plot(ccp_alphas, depth, marker="o", drawstyle="steps-post")
+    # df3 = pd.DataFrame({'alpha': ccp_alphas, 'depth': depth})
+    # df3.to_csv('alpha_vs_depth_noCu.csv')
+    ax[1].set_xlabel("alpha")
+    ax[1].set_xscale('log')
+    ax[1].set_ylabel("depth of tree")
+    ax[1].set_title("Depth vs alpha")
+    fig.tight_layout()
+    plt.show()
+
 # plot the chart of MSE versus number of estimators
-def plt_mse_vs_nestim_tree(estimators, bagging_mse, rf_mse, boosting_mse):
+def plt_mse_vs_nestim_tree(estimators, bagging_mse, rf_mse, bagging_mse2, rf_mse2, bagging_mse3, rf_mse3):
     plt.figure(figsize=(8, 8))
-    plt.title('Bagging, Random Forest and Boosting comparison')
-    plt.plot(estimators, bagging_mse, 'b-', color="black", label='Bagging')
-    plt.plot(estimators, rf_mse, 'b-', color="blue", label='Random Forest')
-    plt.plot(estimators, boosting_mse, 'b-', color="red", label='Boosting')
+    plt.title('XGBoost for Cu and Not Cu')
+    plt.plot(estimators, bagging_mse, 'b-', color="black", label='Bagging (Cu)')
+    plt.plot(estimators, rf_mse, 'b-', color="blue", label='Random Forest (Cu)')
+    plt.plot(estimators, bagging_mse2, 'b-', color="yellow", label='Bagging (Not Cu)')
+    plt.plot(estimators, rf_mse2, 'b-', color="green", label='Random Forest (Not Cu)')
+    plt.plot(estimators, bagging_mse3, 'b-', color="yellow", label='Bagging (All)')
+    plt.plot(estimators, rf_mse3, 'b-', color="green", label='Random Forest (All)')
+
+    # plt.plot(estimators, boosting_mse, 'b-', color="red", label='Boosting (Cu)')
+    # plt.plot(estimators, boosting_mse2, 'b-', color="yellow", label='Boosting (Not Cu)')
     plt.legend(loc='upper right')
     plt.xlabel('Estimators')
     plt.ylabel('Mean Squared Error')
+    plt.show()
+
+# R2 train and R2 test comparison plot
+def R2_train_test_plt(R2_train, R2_test, num_x, parameter):
+    plt.figure(figsize=(8, 8))
+    plt.title('R2 train and R2 test comparison')
+    if parameter=='max_depth':
+        plt.scatter(np.argmax(R2_test), np.max(R2_test), marker='*', color='red', zorder=2,
+        label='Max R2 test: %.2f \nfor max_depth: %d' % (np.max(R2_test), np.argmax(R2_test))
+        )
+    plt.plot(num_x, R2_train, 'b-', color="#414487", label='R2 train', zorder=1)
+    plt.plot(num_x, R2_test, 'b-', color="#FDE725", label='R2 test', zorder=1)
+    plt.legend(loc='lower right')
+    plt.xlabel(parameter)
+    plt.ylabel('R2')
     plt.show()

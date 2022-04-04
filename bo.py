@@ -1,8 +1,11 @@
+from audioop import avg
+from configparser import DuplicateOptionError
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
+from sklearn.svm import SVR
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split, RepeatedKFold, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler, scale
@@ -10,24 +13,90 @@ import scipy.stats as stats
 import pylab
 import statsmodels.api as sm
 
+
 def stat_parameters(dframe, feature):
     size = len(dframe[feature])
     max = np.max(dframe[feature])
     min = np.min(dframe[feature])
-    std = np.std(dframe[feature])
+    std = dframe[feature].std()
     media = np.mean(dframe[feature])
-    quartile_25 = np.quantile(dframe[feature], 0.25)
-    median = np.quantile(dframe[feature], 0.50)
-    quartile_75 = np.quantile(dframe[feature], 0.75)
+    quartile_25 = dframe[feature].quantile(0.25)
+    median = dframe[feature].median()
+    quartile_75 = dframe[feature].quantile(0.75)
     kurtosis = stats.kurtosis(dframe[feature], fisher=True)
     test_k = stats.kurtosistest(dframe[feature])
     # Fisher-Pearson coefficient of skewness
     skewness = stats.skew(dframe[feature])
-    return skewness, kurtosis, test_k
+    
+    return size, min, quartile_25, median, quartile_75, max, media, std
+ 
+def is_null(df):
+    '''
+    Check and count if there are a null values in a whole dataframe, column by column
+    '''
+    col=list(df.columns)
+    counting = []
+    for i in col:
+        count = 0
+        for j in df[i]:
+            if pd.isnull(j):
+                count += 1
+        counting.append(count)
+    return dict(zip(col, counting))
+    
+def grouped_weighted_avg(values, weights, by):
+    '''
+    Gives values, weights and the criterion for grouping, returns the weighted mean
+    '''
+    return (values*weights).groupby(by).sum() / weights.groupby(by).sum()
 
-# Performs multilinear regression and returns RSS and R2_train
-# it is possible add to add in return also MSE_test, MSE_train, R2_test, intercept and coefficients 
+def delete_duplicate(train):
+    '''
+    Cleaning - delete duplicate and reduce each group of duplicates to a 
+    single element with the critical temperature calculated by weighted average
+    '''
+    # create a boolean column: True = duplicate, False= not duplicate
+    train['duplicate'] = train.duplicated(subset=['material'], keep=False)
+    # duplicate dataframe
+    duplicate = train.query('duplicate==True') 
+    duplicate.to_csv('duplicate.csv')  
+    # train all other materials
+    train = train.query('duplicate==False')
+    # create a dataframe without repetition of materials
+    # for all duplicate, we keep one and calculate the averages of the values associated with them
+    standard  = pd.DataFrame()
+    standard = duplicate.groupby('material').mean() 
+    # the next two lines of code are undoubtedly improvable ('groupby' function return a 'material' as index)
+    standard.to_csv('standard.csv')
+    standard = pd.read_csv('standard.csv')
+    # create a column of mean
+    mean_list = []
+    for i,k in zip(standard['material'], standard['critical_temp']):
+        for j in duplicate['material']:
+            if j==i:
+                mean_list.append(k)
+    duplicate['mean_'] = mean_list # mean list! 
+    # create a column of weights with reciprocal of the residues
+    duplicate['residual_rec'] = (np.sqrt((duplicate['critical_temp'] - duplicate['mean_'])**2))**-1
+    # compute a weighted average array
+    wtd_ = grouped_weighted_avg(duplicate['critical_temp'], duplicate['residual_rec'], duplicate['material'])
+    wtf_wtd = []
+    for i in wtd_:
+        wtf_wtd.append(i)
+    # overwrite the critical temperature column
+    standard['critical_temp'] = wtf_wtd
+    standard.to_csv('standard.csv')
+    new_train = pd.concat([standard, train], join='inner')
+    # delete null values 
+    new_train.dropna(axis=0, inplace=True)  
+    # create a csv file with new train dataframe without duplicate
+    new_train.to_csv('new_train.csv')
+
 def multi_reg(x, y):
+    '''
+    This function performs multilinear regression and returns RMSE and R squared scores
+    it is possible add to add in return also MSE_test, MSE_train, R2_test, intercept and coefficients 
+    '''
     # Splitto training set e test set 70/30
     X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.3, train_size=0.7)
 
@@ -54,13 +123,15 @@ def multi_reg(x, y):
     # Plot y_test vs y_pred
     #plt.plot(y_test, y_pred, 'bo')
     #plt.show()
-    return R2_test, R2_train, mse_test, mse_train
-    #return rss, R2_train
+    # return R2_test, R2_train, mse_test, mse_train
+    return rss, R2_train
 
-# Forward stepwise for the models selection (you can use RSS 
-# or R^2 to choose the variable to remove at each iteration,
-# this function use min RSS.
 def backward_stepwise(x, y):
+    '''
+    Forward stepwise for the models selection (you can use RSS 
+    or R^2 to choose the variable to remove at each iteration,
+    this function use min RSS.
+    '''
     result_df = pd.DataFrame()
     for i in range(len(x.columns)-1):
         numb_features = len(x.columns)
@@ -85,8 +156,10 @@ def backward_stepwise(x, y):
         x = x.drop(del_feat, axis=1)
     return result_df
 
-# Calcolo C_p, AIC, BIC and R_2_adj
 def calculate_Cp_AIC_BIC_R2_adj(dframe, y, num_of_features):
+    '''
+    This function computes C_p, AIC, BIC and R_2_adj
+    '''
     m = len(y)
     p = num_of_features
     hat_sigma_squared = (1/(m - p -1)) * min(dframe['RSS'])
@@ -95,10 +168,11 @@ def calculate_Cp_AIC_BIC_R2_adj(dframe, y, num_of_features):
     dframe['AIC'] = (1/(m*hat_sigma_squared)) * (dframe['RSS'] + 2 * dframe['numb_features'] * hat_sigma_squared )
     dframe['BIC'] = (1/(m*hat_sigma_squared)) * (dframe['RSS'] +  np.log(m) * dframe['numb_features'] * hat_sigma_squared )
     dframe['R_squared_adj'] = 1 - ( (1 - dframe['R_squared'])*(m-1)/(m-dframe['numb_features'] -1))
-    #print(df['R_squared_adj'].max())
 
-# Implement cross validation for tuning of alpha parameter for lasso regression
 def alpha_tuning_lasso(x,y):
+    '''
+    This function mplements cross validation for tuning of alpha parameter for lasso regression
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -113,9 +187,11 @@ def alpha_tuning_lasso(x,y):
     results = search.fit(x, y)
     return results.best_params_
 
-# Perform lasso regression and returns R2_test, R2_train, mse_test, mse_train
-# it is possible add in return also the intercept and the coefficients 
 def lasso_reg(x,y, alpha):
+    '''
+    Perform lasso regression and returns R2_test, R2_train, mse_test, mse_train
+    it is possible add in return also the intercept and the coefficients 
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -136,8 +212,10 @@ def lasso_reg(x,y, alpha):
     coeff = lasso.coef_
     return R2_test, R2_train, mse_test, mse_train
 
-# Implement cross validation for tuning of alpha parameter for ridge regression
 def alpha_tuning_ridge(x,y):
+    '''
+    Implement cross validation for tuning of alpha parameter for ridge regression
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -152,9 +230,11 @@ def alpha_tuning_ridge(x,y):
     results = search.fit(x, y)
     return results.best_params_
 
-# Perform ridge regression and returns R2_test, R2_train, mse_test, mse_train
-# it is possible add in return also the intercept and the coefficients 
 def ridge_reg(x,y, alpha):
+    '''
+    Perform ridge regression and returns R2_test, R2_train, mse_test, mse_train
+    it is possible add in return also the intercept and the coefficients 
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -175,8 +255,10 @@ def ridge_reg(x,y, alpha):
     coeff = ridge.coef_
     return R2_test, R2_train, mse_test, mse_train
 
-# Implement cross validation for tuning of the number of components for PCA
 def num_feat_tuning_pca(x,y):
+    '''
+    Implement cross validation (10-fold) for tuning of the number of components for PCA
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -191,8 +273,10 @@ def num_feat_tuning_pca(x,y):
     results = search.fit(x,y)
     return results.best_params_
 
-# principal component analysis (PCA) for feature extraction
 def principal_component_analysis(x,num_components):
+    '''
+    principal component analysis (PCA) for feature extraction
+    '''
     feat_name = list(x.columns)
     # standardizzazione delle feature
     scalar = StandardScaler()
@@ -212,8 +296,10 @@ def principal_component_analysis(x,num_components):
 
     return x_pca, var_ratio, loading_matrix
 
-# Implement cross validation for tuning of the number of components for PLS
 def num_feat_tuning_pls(x,y):
+    '''
+    Implement cross validation for tuning of the number of components for PLS
+    '''
     # standardizzazione delle feature
     scalar = StandardScaler()
     x = scalar.fit_transform(x)
@@ -262,10 +348,12 @@ def partial_least_square(x,y,num_components):
         var_ratio.append(i/r2_sum)
     # Cumulative Variance explains
     pls_var_rate=np.cumsum(np.round(var_ratio, decimals=4)*100)
-    return pls_var_rate, loading_matrix
+    return var_ratio, pls_var_rate, loading_matrix
 
-# Calculate MSE using cross-validation for [0,65] principal components
 def PCR_mse_for_nc(x,y):
+    '''
+    Calculate MSE using cross-validation for [0,65] principal components
+    '''
     #scale predictor variables
     pca = PCA()
     regr = LinearRegression()
@@ -282,15 +370,17 @@ def PCR_mse_for_nc(x,y):
 
     # Calculate MSE using cross-validation, adding one component at a time
     for i in np.arange(1, 65):
+        
         score = -1*cross_val_score(regr,
                 X_reduced[:,:i], y, cv=cv, scoring='neg_mean_squared_error').mean()
         mse.append(score)
-    
+
     return mse
 
-
-# Calculate MSE using cross-validation for [0,65] components of PLS
 def PLS_mse_for_nc(x,y):
+    '''
+    Calculate MSE using cross-validation for [0,65] components of PLS
+    '''
     #define cross-validation method
     cv = RepeatedKFold(n_splits=10, n_repeats=3, random_state=1)
     mse = []
@@ -309,3 +399,63 @@ def PLS_mse_for_nc(x,y):
         mse.append(score)
 
     return mse
+
+def labelling_Cu(df):
+    '''
+    Label all materials with 1 if there is Cu and 0 if not
+    '''
+    labelz = []
+    substring_Cu = 'Cu'
+    for string in df['material']:
+        # condizione labelling
+        label = 0
+        if substring_Cu in string:
+            label = 1
+        else:
+            label = 0
+        labelz.append(label)
+    df['lab'] = labelz
+    df.to_csv('DUMMIE.csv')
+
+# elimina colonne inutili
+def Raffaele(train):
+    col = list(train.columns)
+    print(len(col))
+    features = []
+    for i in col:
+        if i!='material' and  i!='duplicate' and 'std' not in i:
+            features.append(i)
+    train = train[[i for i in features]]
+    print(len(train.columns))
+    train.to_csv('DUMMIE.csv')
+
+
+def predom_elem(unique_m):
+    '''
+    Crea un dataframe con colonne: elemento predominante, numero di composti, Tc media, std
+    '''
+    elements = list(unique_m.columns)
+    unique_m = unique_m.groupby('material').mean()
+    unique_m.to_csv('unique_m.csv')
+    unique_m = pd.read_csv('unique_m.csv')
+    elements.remove('critical_temp')
+    elements.remove('material')
+    matrix = list(unique_m[elements].max(axis=1))
+    elem = list(unique_m[elements].idxmax(axis=1))
+    max_elem_df = pd.DataFrame({'Elemento': elem, 'Concentrazione': matrix})
+    max_elem_df = pd.concat([max_elem_df, unique_m['critical_temp']], axis=1)
+    #max_elem_df.to_csv('max_elem_df.csv', index=False)
+    # mean_temp = max_elem_df.groupby('Elemento')['critical_temp'].mean()
+
+    len_comp, mean_Tc, std = []
+    for elem in elements:
+        mdf = max_elem_df[max_elem_df['Elemento']==elem]
+        len_mdf = int(len(mdf))
+        mean_tc = mdf['critical_temp'].mean()
+        std_tc = mdf['critical_temp'].std()
+        len_comp.append(len_mdf)
+        mean_Tc.append(mean_tc)
+        std.append(std_tc)
+    mean_tc_for_elem = pd.DataFrame({'Elemento predom': elements, 'Quanti composti': len_comp, 'Tc media': mean_Tc, 'STD': std})
+    mean_tc_for_elem = mean_tc_for_elem.sort_values(by=['Quanti composti'])
+    mean_tc_for_elem.to_csv('mean_tc_for_elem.csv', index='False')

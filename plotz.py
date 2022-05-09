@@ -84,6 +84,15 @@ def corr_coeff(dframe):
     fig = heatmap.get_figure()
     plt.show()
 
+
+# Plot feature importance for PCA
+def PCA_feat_imp(top_importances, top_features):
+    plt.title('Feature Importances')
+    plt.barh(range(len(top_importances)), top_importances, color='b', align='center')
+    plt.yticks(range(len(top_importances)), top_features)
+    plt.xlabel('Relative Importance')
+    plt.show()
+
 # plot C_p, AIC, BIC and R_2_adj versus the number of features
 def Plot_Cp_AIC_BIC_R2adj(dframe, dframe_name):
     variables = ['C_p', 'AIC','BIC','R_squared_adj']

@@ -284,7 +284,6 @@ def principal_component_analysis(x,num_components):
     # PCA*
     pca = PCA(n_components=num_components)
     x_pca = pca.fit_transform(x)
-    #components = pca.components_
     # var_ratio is a vector of the variance explained by each dimension
     var_ratio = pca.explained_variance_ratio_
 
@@ -294,7 +293,26 @@ def principal_component_analysis(x,num_components):
         PC_list.append('PC' + str(i))
     loading_matrix = pd.DataFrame(loadings, columns=PC_list, index=feat_name)
 
-    return x_pca, var_ratio, loading_matrix
+    return x_pca, var_ratio, loading_matrix, pca
+
+def PCA_feat_imp(pca, X_train):
+    # PCA feature importance
+    n_pcs = pca.components_.shape[0]
+    initial_feature_names = X_train.columns
+
+    # Take 1 most important feature from each PCA component
+    most_important = [np.abs(pca.components_[i]).argmax() for i in range(n_pcs)]
+    most_important_names = [initial_feature_names[most_important[i]] for i in range(n_pcs)]
+    # Sort all important features from highest to lowest importance
+    zipped_feats = zip(most_important_names, most_important)
+    zipped_feats = sorted(zipped_feats, key=lambda x: x[1], reverse=True)
+
+    # Select top 5
+    features, importances = zip(*zipped_feats)
+    top_features = features[:11][::-1]
+    top_importances = importances[:11][::-1]
+    return top_importances, top_features
+
 
 def num_feat_tuning_pls(x,y):
     '''

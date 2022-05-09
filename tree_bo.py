@@ -55,8 +55,8 @@ def decision_tree(x, y):
     depth = tree_reg.get_depth()
     n_leaves = tree_reg.get_n_leaves
     # print('Depth: ', depth)
-    return R2_train, R2_test, rmse_train, rmse_test, featimp_ord
-    
+    # return R2_train, R2_test, rmse_train, rmse_test, featimp_ord
+    return f_name
 
 def cv_alpha(x,y):
     '''
@@ -225,7 +225,7 @@ def bagging_tree(x,y):
     mse_test = mean_squared_error(y_test, y_pred)
     return R2_train, R2_test, np.sqrt(mse_train), np.sqrt(mse_test), bag_reg.oob_score_
 
-def random_forest(x,y):
+def random_forest(x,y, feature_names):
     '''
     This function performs Random forest ensemble and returns scores:
     R squared and RMSE for training and test sets and out of bag score.
@@ -239,6 +239,17 @@ def random_forest(x,y):
     R2_test = random_fr.score(X_test, y_test)
     mse_train = mean_squared_error(y_train, random_fr.predict(X_train))
     mse_test = mean_squared_error(y_test, random_fr.predict(X_test))
+    feat_imp = random_fr.feature_importances_
+    # feat_name = random_fr.feature_names_in_
+    forest_importances = pd.Series(feat_imp, index=feature_names)
+
+    fig, ax = plt.subplots()
+    forest_importances.plot.bar(ax=ax)
+    ax.set_title("Feature importances")
+    ax.set_ylabel("Mean decrease in impurity")
+    fig.tight_layout()
+    plt.show()
+    # feat_imp_name = zip(feat_imp, feat_name)
 
     return R2_train, R2_test, np.sqrt(mse_train), np.sqrt(mse_test), random_fr.oob_score_
 

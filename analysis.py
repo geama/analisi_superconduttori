@@ -20,6 +20,7 @@ Tc = train[['critical_temp', 'lab']]
 
 # Delete duplicates
 bo.delete_duplicate(train)
+
 # create a new dataframe without duplicates
 new_train = pd.read_csv('new_train.csv') #train without duplicate
 bo.labelling_Cu(new_train)
@@ -118,7 +119,6 @@ y_not_cu = Tc_not_cu.reshape(-1,1)
 # R2_test, R2_train, mse_test, mse_train = bo.multi_reg(x,y)
 
 # Features selection - backward stepwise
-
 '''
 df = bo.backward_stepwise(x_no_cu, y_not_cu)
 df_min_RSS = df[df.groupby('numb_features')['RSS'].transform(min) == df['RSS']]
@@ -134,18 +134,10 @@ bo.calculate_Cp_AIC_BIC_R2_adj(df_min_RSS, y_not_cu, 65)
 
 # plot C_p, AIC, BIC and R_2_adj versus the number of 
 # features for chosen models with max R2 or min RSS
-
 plotz.Plot_Cp_AIC_BIC_R2adj(df_max_R2,'models with R^2 max')
 plotz.Plot_Cp_AIC_BIC_R2adj(df_min_RSS,'models with RSS min')
 '''
-'''
-# R summery of reg lin
-y = Tcp
-X2 = sm.add_constant(x)
-est = sm.OLS(y, X2)
-est2 = est.fit()
-print(est2.summary())
-'''
+
 # ----------- RIDGE REGRESSION -----------
 # Research of best alpha for rigde regression using cross validation
 #ridge_alpha = bo.alpha_tuning_ridge(x,y)
@@ -171,7 +163,11 @@ print(est2.summary())
 # n_features_pca = bo.num_feat_tuning_pca(x,y)
 # n_features_pca['n_components']
 
-# x_pca, var_ratio, loading_matrix = bo.principal_component_analysis(x,n_features_pca['n_components'])
+# PCA feature importance 
+x_pca, var_ratio, loading_matrix, pca = bo.principal_component_analysis(x, 11)#n_features_pca['n_components'])
+top_importances, top_features = bo.PCA_feat_imp(pca, x)
+plotz.PCA_feat_imp(top_importances, top_features)
+
 # # Plot the cumulative variance versus number of components
 # plotz.cumulative_variance_ratio(var_ratio, n_features_pca['n_components'])
 
@@ -186,14 +182,11 @@ print(est2.summary())
 # var_ratio_pls, pls_var_rate, loading_matrix = bo.partial_least_square(x_cu, y_cu, 65)
 # plotz.cumulative_variance_ratio(var_ratio_pls, 65)
 
-
+# ----------- RIDGE VERSUS LASSO -----------
 # Plot MSE of PLS and PCR versus number of components
-'''
-mse_PLS = bo.PLS_mse_for_nc(x,y)
-mse_PCR = bo.PCR_mse_for_nc(x, y)
-plotz.plot_mse_vs_ncomp(mse_PCR, mse_PLS)
-'''
-
+# mse_PLS = bo.PLS_mse_for_nc(x,y)
+# mse_PCR = bo.PCR_mse_for_nc(x, y)
+# plotz.plot_mse_vs_ncomp(mse_PCR, mse_PLS)
 # compute of loadings (the coefficients of the linear combination of the original variables 
 # from which the principal components are constructed.) of PCA and PLS and create a csv file.
 '''
@@ -207,6 +200,7 @@ for p in list(range(5,66,5)):
 PCA_load.to_csv('PCA_load.csv', index=False)
 PLS_load.to_csv('PLS_load.csv', index=False)
 '''
+
 # Tuning max depth for basic decision tree
 # mse_train_list, mse_test_list, R2_train_list, R2_test_list = tree_bo.tuning_depth(x,y, 'tree')
 
@@ -217,8 +211,8 @@ PLS_load.to_csv('PLS_load.csv', index=False)
 # tree_bo.alpha_mse(x_cu,y_cu, DecisionTreeRegressor)
 # print(tree_bo.bagging_tree(x_cu,y_cu))
 # print(tree_bo.bagging_tree(x_no_cu,y_not_cu))
-
-# print(tree_bo.random_forest(x_cu,y_cu))
+# feat_name = tree_bo.decision_tree(x_no_cu,y_not_cu)
+# print(tree_bo.random_forest(x_no_cu,y_not_cu,feat_name))
 # print(tree_bo.random_forest(x_no_cu,y_not_cu))
 
 # Tuning max depth for xgboost
